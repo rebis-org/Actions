@@ -1,0 +1,74 @@
+name: PR status label
+
+on:
+  workflow_call:
+
+permissions:
+  issues: write
+
+jobs:
+  synchronize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const pullRequest = context.payload.pull_request;
+
+            if (!pullRequest) {
+              core.setFailed("This workflow must be called from a pull_request event.");
+              return;
+            }
+
+            const status = Object.freeze({
+              cancelled: "status/cancelled",
+              done: "status/done",
+              inProgress: "status/in-progress",
+              inReview: "status/in-review",
+              todo: "status/todo",
+            });
+            const managedLabels = new Set(Object.values(status));
+            const issue = {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pullRequest.number,
+            };
+
+            let targetLabel;
+            if (pullRequest.merged) {
+              targetLabel = status.done;
+            } else if (pullRequest.state === "closed") {
+              targetLabel = status.cancelled;
+            } else if (pullRequest.assignees.length > 0) {
+              targetLabel = status.inReview;
+            } else if (context.payload.action === "opened") {
+              targetLabel = status.todo;
+            } else {
+              targetLabel = status.inProgress;
+            }
+
+            const labels = await github.paginate(github.rest.issues.listLabelsOnIssue, {
+              ...issue,
+              per_page: 100,
+            });
+            const labelNames = new Set(labels.map((label) => label.name));
+
+            await Promise.all(
+              [...labelNames]
+                .filter((label) => managedLabels.has(label) && label !== targetLabel)
+                .map((label) =>
+                  github.rest.issues.removeLabel({
+                    ...issue,
+                    name: label,
+                  }),
+                ),
+            );
+
+            if (!labelNames.has(targetLabel)) {
+              await github.rest.issues.addLabels({
+                ...issue,
+                labels: [targetLabel],
+              });
+            }
+
+            core.info(`Pull request #${pullRequest.number} is now ${targetLabel}.`);
