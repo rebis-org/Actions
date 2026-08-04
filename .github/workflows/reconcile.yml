@@ -1,0 +1,157 @@
+name: Reconcile
+
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: 'Repos'
+        required: false
+        type: string
+      exclude_repos:
+        description: 'Exclude'
+        required: false
+        type: string
+      force_reconcile:
+        description: 'Ignore state cache and diffs'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+  issues: read
+
+concurrency:
+  group: reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    env:
+      STATE_BIN: ${{ github.workspace }}/.reconcile-bin
+      STATE_DIR: ${{ github.workspace }}/.reconcile
+      STATE_FILE: ${{ github.workspace }}/.reconcile/state.json
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Ensure git-lfs
+        run: |
+          if ! git lfs version >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y git-lfs
+          fi
+
+      - name: Restore state from cache
+        id: state-cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ${{ env.STATE_DIR }}
+          key: reconcile-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: reconcile-state-v1-
+
+      - name: Restore state from artifact
+        if: steps.state-cache.outputs.cache-hit != 'true'
+        uses: actions/github-script@v9.0.0
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const { execFileSync } = require("child_process");
+
+            if (fs.existsSync(process.env.STATE_FILE)) {
+              return;
+            }
+
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              { ...context.repo, per_page: 100 },
+            );
+            const latest = artifacts.reduce(
+              (current, artifact) =>
+                artifact.name === "reconcile-state" &&
+                !artifact.expired &&
+                (!current || artifact.id > current.id)
+                  ? artifact
+                  : current,
+              null,
+            );
+            if (!latest) {
+              return;
+            }
+
+            const download = await github.rest.actions.downloadArtifact({
+              ...context.repo,
+              artifact_id: latest.id,
+              archive_format: "zip",
+            });
+            fs.mkdirSync(process.env.STATE_DIR, { recursive: true });
+            const archive = path.join(process.env.STATE_DIR, "state.zip");
+            fs.writeFileSync(archive, Buffer.from(download.data));
+            try {
+              execFileSync("unzip", ["-o", archive, "-d", process.env.STATE_DIR], {
+                stdio: "inherit",
+              });
+            } finally {
+              fs.rmSync(archive, { force: true });
+            }
+
+      - name: Build
+        working-directory: go
+        run: go build -o "$STATE_BIN" .
+
+      - name: Run reconcile
+        working-directory: go
+        env:
+          RECONCILE_GITHUB_TOKEN: ${{ secrets.RECONCILE_GITHUB_TOKEN || github.token }}
+          RECONCILE_GITHUB_ORGANIZATION: ${{ vars.RECONCILE_GITHUB_ORGANIZATION }}
+          CNB_ROOT_ORGANIZATION: ${{ vars.CNB_ROOT_ORGANIZATION }}
+          CNB_ORG_TOKEN: ${{ secrets.CNB_ORG_TOKEN }}
+          CNB_REPO_TOKEN: ${{ secrets.CNB_REPO_TOKEN }}
+          CNB_GIT_TOKEN: ${{ secrets.CNB_GIT_TOKEN }}
+          CNB_RELEASE_TOKEN: ${{ secrets.CNB_RELEASE_TOKEN }}
+          CNB_GIT_NAME: ${{ vars.CNB_GIT_NAME }}
+          CNB_GIT_EMAIL: ${{ vars.CNB_GIT_EMAIL }}
+          CODEBERG_ROOT_ORGANIZATION: ${{ vars.CODEBERG_ROOT_ORGANIZATION }}
+          CODEBERG_ORG_TOKEN: ${{ secrets.CODEBERG_ORG_TOKEN }}
+          CODEBERG_REPO_TOKEN: ${{ secrets.CODEBERG_REPO_TOKEN }}
+          CODEBERG_GIT_TOKEN: ${{ secrets.CODEBERG_GIT_TOKEN }}
+          CODEBERG_RELEASE_TOKEN: ${{ secrets.CODEBERG_RELEASE_TOKEN }}
+          CODEBERG_GIT_NAME: ${{ vars.CODEBERG_GIT_NAME }}
+          CODEBERG_GIT_EMAIL: ${{ vars.CODEBERG_GIT_EMAIL }}
+          RECONCILE_REPOS: ${{ inputs.repos || vars.RECONCILE_REPOS }}
+          RECONCILE_EXCLUDE_REPOS: ${{ inputs.exclude_repos || vars.RECONCILE_EXCLUDE_REPOS }}
+          RECONCILE_FORCE_RECONCILE: ${{ inputs.force_reconcile || vars.RECONCILE_FORCE_RECONCILE || 'false' }}
+        run: '"$STATE_BIN"'
+
+      - name: Sanitize state before persisting
+        if: always()
+        run: |
+          if [ -f "$STATE_FILE" ]; then
+            jq 'walk(if type == "object" then del(.data.private, .data.visibility) else . end)' "$STATE_FILE" > "$STATE_FILE.sanitized"
+            mv "$STATE_FILE.sanitized" "$STATE_FILE"
+          fi
+
+      - name: Save state to cache
+        if: always()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ${{ env.STATE_DIR }}
+          key: reconcile-state-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload state artifact
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: reconcile-state
+          path: ${{ env.STATE_FILE }}
+          if-no-files-found: ignore
+          retention-days: 7
