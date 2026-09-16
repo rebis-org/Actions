@@ -1,0 +1,74 @@
+name: PR status label
+
+on:
+  workflow_call:
+    inputs:
+      label_prefix:
+        description: Prefix for managed status labels
+        required: false
+        type: string
+        default: status/
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  synchronize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        env:
+          LABEL_PREFIX: ${{ inputs.label_prefix }}
+        with:
+          script: |
+            const pullRequest = context.payload.pull_request;
+            if (!pullRequest) {
+              core.setFailed("This workflow must be called from a pull_request event.");
+              return;
+            }
+
+            const status = Object.freeze({
+              cancelled: `${process.env.LABEL_PREFIX}cancelled`,
+              done: `${process.env.LABEL_PREFIX}done`,
+              inProgress: `${process.env.LABEL_PREFIX}in-progress`,
+              inReview: `${process.env.LABEL_PREFIX}in-review`,
+              todo: `${process.env.LABEL_PREFIX}todo`,
+            });
+            const managed = new Set(Object.values(status));
+            const issue = {
+              ...context.repo,
+              issue_number: pullRequest.number,
+            };
+
+            let targetLabel = status.inProgress;
+            if (pullRequest.merged) {
+              targetLabel = status.done;
+            } else if (pullRequest.state === "closed") {
+              targetLabel = status.cancelled;
+            } else if (pullRequest.assignees.length > 0) {
+              targetLabel = status.inReview;
+            } else if (context.payload.action === "opened") {
+              targetLabel = status.todo;
+            }
+
+            const labels = new Set(
+              (await github.paginate(
+                github.rest.issues.listLabelsOnIssue,
+                { ...issue, per_page: 100 },
+              )).map(({ name }) => name),
+            );
+            const stale = [...labels].filter(
+              (label) => managed.has(label) && label !== targetLabel,
+            );
+
+            await Promise.all(
+              stale.map((name) =>
+                github.rest.issues.removeLabel({ ...issue, name }),
+              ),
+            );
+            if (!labels.has(targetLabel)) {
+              await github.rest.issues.addLabels({ ...issue, labels: [targetLabel] });
+            }
+
+            core.info(`Pull request #${pullRequest.number} is now ${targetLabel}.`);

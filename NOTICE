@@ -1,0 +1,15 @@
+WHEREAS, the Software described herein is proprietary to and distributed by rebis-org; AND WHEREAS, the Software has been maintained through the contributions of one or more contributors, each of whom has agreed to make its respective contributions available pursuant to the terms and conditions set forth in the applicable license; AND WHEREAS, rebis-org has determined that the rights, privileges, and permissions relating to the Software shall be made available pursuant to the terms and conditions of either the Apache License, Version 2 (SPDX identifier: Apache-2.0) or the Mulan Permissive Software License, Version 2 (SPDX identifier: MulanPSL-2.0), subject to the provisions herein contained; NOW, THEREFORE, NOTICE IS HEREBY GIVEN that the Software is made available to each recipient upon the terms and conditions set forth in the applicable license.
+
+The recipient shall be entitled to exercise such rights in and to the Software as are expressly granted under the applicable license; provided, however, that the selection of the governing license shall be subject to the jurisdictional limitation set forth herein. Notwithstanding anything contained herein or otherwise, all use, reproduction, modification, distribution, or other exercise of rights in and to the Software within the jurisdiction of the People's Republic of China shall be governed solely and exclusively by the Mulan Permissive Software License, Version 2 (SPDX identifier: MulanPSL-2.0). For the avoidance of doubt, no right, title, license, permission, privilege, or authorization shall be deemed granted, whether expressly, impliedly, or otherwise, under the Apache License, Version 2 in respect of any such activity occurring within such jurisdiction.
+
+Except as expressly provided under the applicable license, no right, title, interest, or other proprietary entitlement in or to the Software is granted, transferred, assigned, or otherwise conveyed to any recipient. All rights not expressly granted herein or under the applicable license are hereby reserved.
+
+For the purposes of this NOTICE, the "Software" shall be construed to include and shall mean the directories and files distributed with the Software, whether contained therein directly or indirectly, and associated files derived therefrom. Without prejudice to the generality of the foregoing, the Software shall include, where existing, any file designated NOTICE, LICENSE, COPYING, or README.md.
+
+Notwithstanding any other provision herein, files and materials created primarily for purposes of community health, project administration, governance, or community management shall not be deemed to constitute part of the Software and shall fall outside the scope of this NOTICE.
+
+The applicable license texts are incorporated herein by reference and shall form part of the terms governing the rights granted with respect to the Software:
+
+* <https://www.apache.org/licenses/LICENSE-2.0>
+
+* <http://license.coscl.org.cn/MulanPSL2>
