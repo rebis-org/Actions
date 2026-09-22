@@ -1,5 +1,5 @@
-cnb.cool/cnb/sdk/go-cnb v1.25.8 h1:4o0si4kZXczSth0ydSpwRWhXsoJpRRCbCVxnqMHBPFI=
-cnb.cool/cnb/sdk/go-cnb v1.25.8/go.mod h1:B9dkmLL6o1p3Ga0zILYKJAHVbcoGE4ATbvoSnzl96ag=
+cnb.cool/cnb/sdk/go-cnb v1.28.8 h1:dfc/txYFCNIh+9aq4m/N7mKdaJDfrc9uVwD80qz5tXg=
+cnb.cool/cnb/sdk/go-cnb v1.28.8/go.mod h1:CKkzowP2z9M/Of6dP7ZI3xanaIXPdlmT3guU5+SHG7U=
 gitea.dev/sdk v1.2.0 h1:avRtJl/nKCGispgSalo9czoZM9Rto1awnE0caNAoXGo=
 gitea.dev/sdk v1.2.0/go.mod h1:rfh5oNdIK24cbCREwIn1tqWKQW+IICXFGWJyebuOAOE=
 github.com/42wim/httpsig v1.2.4 h1:mI5bH0nm4xn7K18fo1K3okNDRq8CCJ0KbBYWyA6r8lU=
