@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	cnb.cool/cnb/sdk/go-cnb v1.28.8
-	gitea.dev/sdk v1.2.0
+	gitea.dev/sdk v1.3.0
 	github.com/google/go-github/v89 v89.0.0
 )
 
