@@ -363,20 +363,24 @@ func (run *reconciler) repository(ctx context.Context, repository Repository) er
 
 	stages := []func() error{
 		func() error { return run.publish(ctx, repository, remotes) },
-		stage(func() { run.labels(ctx, repository, prepared) }),
-		stage(func() { run.milestones(ctx, repository, prepared) }),
-		stage(func() { run.releases(ctx, repository, prepared) }),
+		func() error { return run.labels(ctx, repository, prepared) },
+		func() error { return run.milestones(ctx, repository, prepared) },
+		func() error { return run.releases(ctx, repository, prepared) },
 	}
 
-	err := errors.Join(
+	writeErr := errors.Join(
 		preparationErr,
 		each(ctx, len(stages), stages, func(execute func() error) error {
 			return execute()
 		}),
-		each(ctx, len(prepared), prepared, func(target preparedTarget) error {
-			return target.provider.reconcileArchive(ctx, repository)
-		}),
 	)
+	if writeErr == nil {
+		writeErr = each(ctx, len(prepared), prepared, func(target preparedTarget) error {
+			return target.provider.reconcileArchive(ctx, repository)
+		})
+	}
+
+	err := writeErr
 	if err == nil {
 		slog.Info("reconciled repository", "repository", repository.fullName())
 
@@ -404,31 +408,26 @@ func (run *reconciler) labels(
 	ctx context.Context,
 	repository Repository,
 	targets []preparedTarget,
-) {
+) error {
 	if len(targets) == 0 {
-		return
+		return nil
 	}
 
 	labels, err := run.source.labels(ctx, repository)
 	if err != nil {
-		slog.Warn("cannot read labels", "repository", repository.fullName(), "error", err)
-
-		return
+		return fmt.Errorf("read labels %s: %w", repository.fullName(), err)
 	}
 
-	err = each(ctx, len(targets), targets, func(target preparedTarget) error {
+	return each(ctx, len(targets), targets, func(target preparedTarget) error {
 		return target.provider.reconcileLabels(ctx, repository, labels)
 	})
-	if err != nil {
-		slog.Warn("cannot reconcile labels", "repository", repository.fullName(), "error", err)
-	}
 }
 
 func (run *reconciler) milestones(
 	ctx context.Context,
 	repository Repository,
 	targets []preparedTarget,
-) {
+) error {
 	supported := make([]milestoneProvider, 0, len(targets))
 
 	for _, target := range targets {
@@ -438,49 +437,39 @@ func (run *reconciler) milestones(
 	}
 
 	if len(supported) == 0 {
-		return
+		return nil
 	}
 
 	milestones, err := run.source.milestones(ctx, repository)
 	if err != nil {
-		slog.Warn("cannot read milestones", "repository", repository.fullName(), "error", err)
-
-		return
+		return fmt.Errorf("read milestones %s: %w", repository.fullName(), err)
 	}
 
-	err = each(ctx, len(supported), supported, func(provider milestoneProvider) error {
+	return each(ctx, len(supported), supported, func(provider milestoneProvider) error {
 		return provider.reconcileMilestones(ctx, repository, milestones)
 	})
-	if err != nil {
-		slog.Warn("cannot reconcile milestones", "repository", repository.fullName(), "error", err)
-	}
 }
 
 func (run *reconciler) releases(
 	ctx context.Context,
 	repository Repository,
 	targets []preparedTarget,
-) {
+) error {
 	if len(targets) == 0 {
-		return
+		return nil
 	}
 
 	releases, err := run.source.releases(ctx, repository)
 	if err != nil {
-		slog.Warn("cannot read releases", "repository", repository.fullName(), "error", err)
-
-		return
+		return fmt.Errorf("read releases %s: %w", repository.fullName(), err)
 	}
 	defer closeReleaseAssets(releases)
 
 	if len(releases) == 0 {
-		return
+		return nil
 	}
 
-	err = each(ctx, len(targets), targets, func(target preparedTarget) error {
+	return each(ctx, len(targets), targets, func(target preparedTarget) error {
 		return target.provider.reconcileReleases(ctx, repository, releases)
 	})
-	if err != nil {
-		slog.Warn("cannot reconcile releases", "repository", repository.fullName(), "error", err)
-	}
 }

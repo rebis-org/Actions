@@ -97,14 +97,6 @@ func parallel[I, O any](
 	return values, errors.Join(failures...)
 }
 
-func stage(task func()) func() error {
-	return func() error {
-		task()
-
-		return nil
-	}
-}
-
 func each[I any](ctx context.Context, limit int, inputs []I, run func(I) error) error {
 	_, err := parallel(ctx, limit, inputs, func(input I) (struct{}, error) {
 		return struct{}{}, run(input)

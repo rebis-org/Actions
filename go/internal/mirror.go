@@ -455,7 +455,15 @@ func pushMirror(
 		))
 	}
 
-	_, err := tool.run(ctx, directory, environment, "push", "--mirror", mirror.Target)
+	_, err := tool.run(
+		ctx,
+		directory,
+		environment,
+		"push",
+		mirror.Target,
+		"+refs/heads/*:refs/heads/*",
+		"+refs/tags/*:refs/tags/*",
+	)
 
 	return err
 }
