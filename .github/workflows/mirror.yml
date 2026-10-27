@@ -1,0 +1,113 @@
+name: Mirror
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.plan.outputs.count }}
+      entries: ${{ steps.plan.outputs.entries }}
+    steps:
+      - name: Plan mirrors
+        id: plan
+        env:
+          MIRROR_REPOS: ${{ vars.MIRROR_REPOS }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+
+          entries = [
+              entry.strip()
+              for entry in re.split(r"[\n,]", os.environ.get("MIRROR_REPOS", ""))
+              if entry.strip()
+          ]
+          matrix = [
+              {"spec": entry, "cache": hashlib.sha256(entry.encode()).hexdigest()[:16]}
+              for entry in entries
+          ]
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"count={len(matrix)}\n")
+              output.write(f"entries={json.dumps(matrix)}\n")
+          PY
+
+  mirror:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        entry: ${{ fromJSON(needs.plan.outputs.entries) }}
+    env:
+      MIRROR_WORKSPACE: ${{ github.workspace }}/.mirror
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go/go.mod
+          cache-dependency-path: go/go.sum
+
+      - name: Prune stale mirror caches
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --repo "$GITHUB_REPOSITORY" \
+            --key "mirror-${{ matrix.entry.cache }}-" \
+            --limit 100 --json id,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do
+              gh cache delete "$id" --repo "$GITHUB_REPOSITORY"
+            done
+
+      - name: Restore mirror cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ${{ env.MIRROR_WORKSPACE }}
+          key: mirror-${{ matrix.entry.cache }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mirror-${{ matrix.entry.cache }}-
+
+      - name: Build
+        working-directory: go
+        run: go build -o "$RUNNER_TEMP/actions" ./cmd
+
+      - name: Run mirror
+        working-directory: go
+        env:
+          MIRROR_GITHUB_TOKEN: ${{ secrets.MIRROR_GITHUB_TOKEN || secrets.RECONCILE_GITHUB_TOKEN }}
+          MIRROR_GITHUB_ORGANIZATION: ${{ vars.MIRROR_GITHUB_ORGANIZATION }}
+          MIRROR_REPOS: ${{ matrix.entry.spec }}
+          MIRROR_CONCURRENCY: ${{ vars.MIRROR_CONCURRENCY }}
+          CNB_GIT_TOKEN: ${{ secrets.CNB_GIT_TOKEN }}
+          CODEBERG_GIT_TOKEN: ${{ secrets.CODEBERG_GIT_TOKEN }}
+          FORGEJO_URL: ${{ vars.FORGEJO_URL }}
+          FORGEJO_GIT_TOKEN: ${{ secrets.FORGEJO_GIT_TOKEN }}
+          FORGEJO_GIT_USERNAME: ${{ vars.FORGEJO_GIT_USERNAME }}
+        run: '"$RUNNER_TEMP/actions" mirror'
+
+      - name: Prepare mirror workspace
+        if: always()
+        run: mkdir -p "$MIRROR_WORKSPACE"
+
+      - name: Save mirror cache
+        if: always()
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ${{ env.MIRROR_WORKSPACE }}
+          key: mirror-${{ matrix.entry.cache }}-${{ github.run_id }}-${{ github.run_attempt }}
