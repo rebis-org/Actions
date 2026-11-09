@@ -3,7 +3,7 @@ module github.com/rebis-org/actions
 go 1.27.1
 
 require (
-	cnb.cool/cnb/sdk/go-cnb v1.28.8
+	cnb.cool/cnb/sdk/go-cnb v1.29.15
 	gitea.dev/sdk v1.3.0
 	github.com/google/go-github/v93 v93.0.0
 )
